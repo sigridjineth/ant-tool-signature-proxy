@@ -1,0 +1,23 @@
+{
+  "name": "anthropic-tool-signature-proxy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local reverse proxy for experimenting with Anthropic-compatible tool signature variants",
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "packageManager": "pnpm@10.23.0",
+  "scripts": {
+    "dev": "tsx src/cli.ts",
+    "start": "node dist/cli.js",
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}
