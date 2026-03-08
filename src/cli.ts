@@ -1,4 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import type { ReadableStream as WebReadableStream } from "node:stream/web";
 import { URL } from "node:url";
 import { TOOL_SIGNATURE_VARIANTS, type ToolSignatureVariant } from "./experiments.js";
 import {
@@ -9,6 +12,7 @@ import {
   normalizeMountPath,
   resolveUpstreamPath,
   rewriteRequestBody,
+  sanitizeResponseHeaders,
   type UpstreamAuthMode,
 } from "./proxy.js";
 
@@ -307,10 +311,7 @@ async function readRequestBody(req: IncomingMessage): Promise<string> {
 }
 
 function copyResponseHeaders(headers: Headers, res: ServerResponse): void {
-  for (const [key, value] of headers.entries()) {
-    if (key.toLowerCase() === "connection" || key.toLowerCase() === "transfer-encoding") {
-      continue;
-    }
+  for (const [key, value] of Object.entries(sanitizeResponseHeaders(headers))) {
     res.setHeader(key, value);
   }
 }
@@ -377,11 +378,19 @@ async function main(): Promise<void> {
         headers,
         body: req.method === "GET" || req.method === "HEAD" ? undefined : rewrittenBody,
       });
-      const responseBuffer = Buffer.from(await upstreamResponse.arrayBuffer());
 
       res.statusCode = upstreamResponse.status;
       copyResponseHeaders(upstreamResponse.headers, res);
-      res.end(responseBuffer);
+      if (!upstreamResponse.body || req.method === "HEAD") {
+        res.end();
+        return;
+      }
+
+      res.flushHeaders();
+      await pipeline(
+        Readable.fromWeb(upstreamResponse.body as unknown as WebReadableStream<Uint8Array>),
+        res,
+      );
     } catch (error) {
       res.writeHead(502, { "content-type": "application/json" });
       res.end(

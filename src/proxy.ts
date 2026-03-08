@@ -122,6 +122,24 @@ export function buildForwardHeaders(params: {
   return next;
 }
 
+export function sanitizeResponseHeaders(headers: Headers): Record<string, string> {
+  const next: Record<string, string> = {};
+  for (const [key, value] of headers.entries()) {
+    const normalized = key.toLowerCase();
+    if (
+      normalized === "connection" ||
+      normalized === "keep-alive" ||
+      normalized === "transfer-encoding" ||
+      normalized === "content-length" ||
+      normalized === "content-encoding"
+    ) {
+      continue;
+    }
+    next[key] = value;
+  }
+  return next;
+}
+
 export function ensureCommaSeparatedHeader(params: {
   headers: Record<string, string>;
   headerName: string;

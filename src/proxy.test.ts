@@ -6,6 +6,7 @@ import {
   normalizeMountPath,
   resolveUpstreamPath,
   rewriteRequestBody,
+  sanitizeResponseHeaders,
 } from "./proxy.js";
 
 describe("proxy helpers", () => {
@@ -217,5 +218,22 @@ describe("proxy helpers", () => {
         },
       }),
     ).toBe("sk-ant-test-array");
+  });
+
+  it("sanitizes upstream response headers for decompressed proxy responses", () => {
+    const headers = new Headers({
+      "content-type": "text/event-stream; charset=utf-8",
+      "content-encoding": "gzip",
+      "content-length": "1234",
+      connection: "keep-alive",
+      "keep-alive": "timeout=5",
+      "transfer-encoding": "chunked",
+      "request-id": "req_test",
+    });
+
+    expect(sanitizeResponseHeaders(headers)).toEqual({
+      "content-type": "text/event-stream; charset=utf-8",
+      "request-id": "req_test",
+    });
   });
 });
