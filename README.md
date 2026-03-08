@@ -79,6 +79,104 @@ pnpm dev -- \
 
 The exchange flow calls `POST /api/oauth/claude_cli/create_api_key` on the upstream origin, sends the OAuth token as `Authorization: Bearer ...`, and then caches the returned Anthropic API key in memory for the life of the proxy process.
 
+## OpenClaw Comparison
+
+OpenClaw-style Claude compatibility and Anthropic wire format are two different layers.
+
+OpenClaw strict-compat surface:
+
+```json
+[
+  { "name": "Read", "description": "Read file" },
+  { "name": "Write", "description": "Write file" },
+  { "name": "Edit", "description": "Edit file" },
+  { "name": "Bash", "description": "Run shell commands" }
+]
+```
+
+This is the outward tool surface shown to the model in Anthropic OAuth strict-compat mode.
+It makes the tool inventory look more Claude-like by reducing OpenClaw-specific tools and
+renaming canonical internal tools such as `exec` to `Bash`.
+
+Anthropic wire payload:
+
+```json
+{
+  "tools": [
+    {
+      "name": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string" }
+        },
+        "required": ["path"]
+      },
+      "description": "Read file",
+      "type": "custom"
+    }
+  ],
+  "tool_choice": {
+    "type": "tool",
+    "name": "read"
+  }
+}
+```
+
+This is what Anthropic's Messages API accepts today. The important point is that Claude-like
+tool names on the model-facing surface do not mean Anthropic receives an OpenAI function
+envelope on the wire.
+
+Proxy rewrite behavior:
+
+Client sends OpenAI-style function tools:
+
+```json
+{
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "read",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": { "type": "string" }
+          }
+        }
+      }
+    }
+  ],
+  "tool_choice": {
+    "type": "function",
+    "function": { "name": "read" }
+  }
+}
+```
+
+When the upstream is Anthropic itself, this proxy rewrites it to:
+
+```json
+{
+  "tools": [
+    {
+      "type": "custom",
+      "name": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string" }
+        }
+      }
+    }
+  ],
+  "tool_choice": {
+    "type": "tool",
+    "name": "read"
+  }
+}
+```
+
 By default the proxy listens on `127.0.0.1:8787` and expects the client to call it through `/anthropic`.
 
 That means your local client can use:
