@@ -26,6 +26,62 @@ describe("tool signature experiments", () => {
     expect(applyToolSignatureVariant(buildPayload(), "anthropic-native")).toEqual(buildPayload());
   });
 
+  it("adds explicit custom tool types for anthropic explicit-custom variants", () => {
+    expect(applyToolSignatureVariant(buildPayload(), "anthropic-explicit-custom")).toEqual({
+      tools: [
+        {
+          type: "custom",
+          name: "read",
+          description: "Read a file",
+          input_schema: {
+            type: "object",
+            properties: {
+              path: { type: "string", description: "Path", title: "Path" },
+              offset: { type: "number", title: "Offset" },
+            },
+            required: ["path"],
+          },
+        },
+      ],
+      tool_choice: { type: "tool", name: "read" },
+    });
+  });
+
+  it("preserves existing typed anthropic tools", () => {
+    expect(
+      applyToolSignatureVariant(
+        {
+          tools: [
+            {
+              type: "web_search_20250305",
+              name: "web_search",
+              input_schema: {
+                type: "object",
+                properties: {
+                  query: { type: "string", title: "Query" },
+                },
+              },
+            },
+          ],
+        },
+        "anthropic-explicit-custom-compact",
+      ),
+    ).toEqual({
+      tools: [
+        {
+          type: "web_search_20250305",
+          name: "web_search",
+          input_schema: {
+            type: "object",
+            properties: {
+              query: { type: "string" },
+            },
+          },
+        },
+      ],
+    });
+  });
+
   it("converts payloads to OpenAI function envelopes", () => {
     expect(applyToolSignatureVariant(buildPayload(), "openai-functions")).toEqual({
       tools: [

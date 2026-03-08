@@ -11,12 +11,15 @@ export type ToolSignatureVariant = {
   id:
     | "anthropic-native"
     | "anthropic-native-compact"
+    | "anthropic-explicit-custom"
+    | "anthropic-explicit-custom-compact"
     | "openai-functions"
     | "openai-functions-compact"
     | "openai-functions-strict";
   description: string;
   envelope: "anthropic" | "openai-function";
   schemaStyle: "preserve" | "compact";
+  explicitCustomType?: boolean;
   strict?: boolean;
 };
 
@@ -32,6 +35,20 @@ export const TOOL_SIGNATURE_VARIANTS = [
     description: "Anthropic-native tools with schema titles stripped recursively.",
     envelope: "anthropic",
     schemaStyle: "compact",
+  },
+  {
+    id: "anthropic-explicit-custom",
+    description: 'Anthropic custom tools with an explicit type: "custom".',
+    envelope: "anthropic",
+    schemaStyle: "preserve",
+    explicitCustomType: true,
+  },
+  {
+    id: "anthropic-explicit-custom-compact",
+    description: 'Anthropic custom tools with an explicit type: "custom" and compact schemas.',
+    envelope: "anthropic",
+    schemaStyle: "compact",
+    explicitCustomType: true,
   },
   {
     id: "openai-functions",
@@ -92,27 +109,41 @@ function normalizeSchema(
 
 function toAnthropicToolShape(
   tool: ToolLike | Record<string, unknown>,
-  style: ToolSignatureVariant["schemaStyle"],
+  variant: Pick<ToolSignatureVariant, "schemaStyle" | "explicitCustomType">,
 ): Record<string, unknown> {
   const record = tool as Record<string, unknown>;
   if (isRecord(record.function)) {
     const functionSpec = record.function;
     const next: Record<string, unknown> = {
       name: typeof functionSpec.name === "string" ? functionSpec.name : record.name,
-      input_schema: normalizeSchema(functionSpec.parameters, style),
+      input_schema: normalizeSchema(functionSpec.parameters, variant.schemaStyle),
     };
     if (typeof functionSpec.description === "string" && functionSpec.description.trim()) {
       next.description = functionSpec.description;
+    }
+    if (variant.explicitCustomType) {
+      next.type = "custom";
+    }
+    return next;
+  }
+
+  if (typeof record.type === "string" && record.type.trim()) {
+    const next = cloneValue(record);
+    if (isRecord(next.input_schema)) {
+      next.input_schema = normalizeSchema(next.input_schema, variant.schemaStyle);
     }
     return next;
   }
 
   const next: Record<string, unknown> = {
     name: tool.name,
-    input_schema: normalizeSchema(tool.parameters ?? record.input_schema, style),
+    input_schema: normalizeSchema(tool.parameters ?? record.input_schema, variant.schemaStyle),
   };
   if (typeof tool.description === "string" && tool.description.trim()) {
     next.description = tool.description;
+  }
+  if (variant.explicitCustomType) {
+    next.type = "custom";
   }
   return next;
 }
@@ -220,7 +251,12 @@ export function applyToolSignatureVariant(
       variant.envelope === "anthropic"
         ? next.tools
             .map((tool) =>
-              isRecord(tool) ? toAnthropicToolShape(tool, variant.schemaStyle) : undefined,
+              isRecord(tool)
+                ? toAnthropicToolShape(tool, {
+                    schemaStyle: variant.schemaStyle,
+                    explicitCustomType: variant.explicitCustomType,
+                  })
+                : undefined,
             )
             .filter((tool): tool is Record<string, unknown> => !!tool)
         : next.tools
